@@ -1,0 +1,257 @@
+trigger:
+  branches:
+    include: [main, release/*]
+  paths:
+    include:
+      - services/sales/**
+      - building-blocks/**
+      - event-contracts/**
+
+pr:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - services/sales/**
+
+variables:
+  - group: retail-pos-platform-vars
+  - name: serviceName
+    value: sales-service
+  - name: serviceDir
+    value: services/sales
+  - name: imageRepo
+    value: retail-pos/sales-service
+  - name: dotnetVersion
+    value: '10.0.x'
+  - name: podmanVersion
+    value: '5.x'
+  - name: vmImage
+    value: ubuntu-latest
+
+stages:
+
+# ═══════════════════════════════════════════════════
+# STAGE 1 — Code Quality & Security
+# ═══════════════════════════════════════════════════
+- stage: QualityGate
+  displayName: Quality Gate
+  jobs:
+  - job: LintAndAnalyze
+    displayName: Format, Lint & SAST
+    pool:
+      vmImage: $(vmImage)
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        version: $(dotnetVersion)
+        includePreviewVersions: true
+
+    - script: |
+        dotnet format $(serviceDir) --verify-no-changes --severity warn
+      displayName: Code Format Check
+
+    - script: |
+        dotnet tool install -g dotnet-sonarscanner
+        dotnet sonarscanner begin /k:"retail-pos-$(serviceName)" /d:sonar.host.url=$(sonarHostUrl) /d:sonar.login=$(sonarToken)
+        dotnet build $(serviceDir) -c Release
+        dotnet sonarscanner end /d:sonar.login=$(sonarToken)
+      displayName: SonarQube Analysis
+      condition: ne(variables['Build.Reason'], 'PullRequest')
+
+    - script: |
+        dotnet tool install -g security-scan
+        security-scan $(serviceDir)/RetailPos.Sales.sln --no-banner --export-format sarif --export-path $(Build.ArtifactStagingDirectory)/sast.sarif
+      displayName: SAST Security Scan
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: $(Build.ArtifactStagingDirectory)
+        artifactName: security-reports
+
+# ═══════════════════════════════════════════════════
+# STAGE 2 — Build & Test
+# ═══════════════════════════════════════════════════
+- stage: BuildTest
+  displayName: Build & Test
+  dependsOn: QualityGate
+  jobs:
+  - job: UnitTests
+    displayName: Unit Tests + Coverage
+    pool:
+      vmImage: $(vmImage)
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        version: $(dotnetVersion)
+        includePreviewVersions: true
+
+    - task: DotNetCoreCLI@2
+      displayName: Restore
+      inputs:
+        command: restore
+        projects: $(serviceDir)/**/*.sln
+
+    - task: DotNetCoreCLI@2
+      displayName: Build (Release)
+      inputs:
+        command: build
+        projects: $(serviceDir)/**/*.sln
+        arguments: --configuration Release --no-restore
+
+    - task: DotNetCoreCLI@2
+      displayName: Unit Tests
+      inputs:
+        command: test
+        projects: $(serviceDir)/**/Tests/RetailPos.Sales.UnitTests/*.csproj
+        arguments: >
+          --configuration Release
+          --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory $(Agent.TempDirectory)/coverage
+          --logger trx
+          --settings $(serviceDir)/coverlet.runsettings
+
+    - task: PublishCodeCoverageResults@2
+      inputs:
+        codeCoverageTool: Cobertura
+        summaryFileLocation: $(Agent.TempDirectory)/coverage/**/coverage.cobertura.xml
+        failIfCoverageEmpty: true
+
+    - task: BuildQualityChecks@9
+      inputs:
+        checkCoverage: true
+        coverageFailOption: fixed
+        coverageType: lines
+        coverageThreshold: 80
+
+  - job: IntegrationTests
+    displayName: Integration Tests
+    pool:
+      vmImage: $(vmImage)
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: sales_test
+        ports: ['5432:5432']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        version: $(dotnetVersion)
+        includePreviewVersions: true
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: test
+        projects: $(serviceDir)/**/Tests/RetailPos.Sales.IntegrationTests/*.csproj
+        arguments: --configuration Release
+
+# ═══════════════════════════════════════════════════
+# STAGE 3 — Containerize with Podman
+# ═══════════════════════════════════════════════════
+- stage: Containerize
+  displayName: Build & Push Container (Podman)
+  dependsOn: BuildTest
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - job: PodmanBuild
+    displayName: Rootless Podman Build
+    pool:
+      vmImage: $(vmImage)
+    steps:
+    - script: |
+        # Install Podman
+        sudo apt-get update -qq
+        sudo apt-get install -y podman
+        podman --version
+      displayName: Install Podman
+
+    - script: |
+        # Rootless Podman build — no daemon, no root
+        podman build \
+          --file $(serviceDir)/RetailPos.Sales.Api/Dockerfile \
+          --tag $(registryFqdn)/$(imageRepo):$(Build.BuildId) \
+          --tag $(registryFqdn)/$(imageRepo):latest \
+          --label "build.id=$(Build.BuildId)" \
+          --label "build.branch=$(Build.SourceBranchName)" \
+          --label "build.commit=$(Build.SourceVersion)" \
+          .
+      displayName: Podman Build (Rootless)
+
+    - script: |
+        # Trivy vulnerability scan — fail on HIGH/CRITICAL
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+        trivy image \
+          --exit-code 1 \
+          --severity HIGH,CRITICAL \
+          --format sarif \
+          --output $(Build.ArtifactStagingDirectory)/trivy.sarif \
+          $(registryFqdn)/$(imageRepo):$(Build.BuildId)
+      displayName: Trivy Container Scan
+
+    - script: |
+        podman login $(registryFqdn) --username $(registryUser) --password $(registryPassword)
+        podman push $(registryFqdn)/$(imageRepo):$(Build.BuildId)
+        podman push $(registryFqdn)/$(imageRepo):latest
+      displayName: Push to Registry
+
+# ═══════════════════════════════════════════════════
+# STAGE 4 — Deploy Dev
+# ═══════════════════════════════════════════════════
+- stage: DeployDev
+  displayName: Deploy to Dev
+  dependsOn: Containerize
+  variables:
+    environment: dev
+  jobs:
+  - deployment: Deploy
+    environment: retail-pos-dev
+    pool:
+      vmImage: $(vmImage)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: KubernetesManifest@1
+            inputs:
+              action: deploy
+              namespace: retail-pos-dev
+              manifests: |
+                infrastructure/k8s/sales-service/deployment.yaml
+                infrastructure/k8s/sales-service/service.yaml
+              containers: $(registryFqdn)/$(imageRepo):$(Build.BuildId)
+
+          - script: |
+              kubectl rollout status deployment/sales-service -n retail-pos-dev --timeout=5m
+            displayName: Verify rollout
+
+# ═══════════════════════════════════════════════════
+# STAGE 5 — Deploy Production (Blue-Green)
+# ═══════════════════════════════════════════════════
+- stage: DeployProd
+  displayName: Deploy to Production
+  dependsOn: DeployDev
+  variables:
+    environment: prod
+  jobs:
+  - deployment: Deploy
+    environment: retail-pos-prod
+    pool:
+      vmImage: $(vmImage)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: KubernetesManifest@1
+            inputs:
+              action: deploy
+              namespace: retail-pos
+              strategy: blueGreen
+              manifests: |
+                infrastructure/k8s/sales-service/deployment.yaml
+                infrastructure/k8s/sales-service/service.yaml
+              containers: $(registryFqdn)/$(imageRepo):$(Build.BuildId)
