@@ -1,0 +1,39 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.0.0
+
+# Building Blocks
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.BuildingBlocks.Domain", "building-blocks\RetailPos.BuildingBlocks.Domain\RetailPos.BuildingBlocks.Domain.csproj", "{BB000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.BuildingBlocks.Application", "building-blocks\RetailPos.BuildingBlocks.Application\RetailPos.BuildingBlocks.Application.csproj", "{BB000002-0000-0000-0000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.BuildingBlocks.EventSourcing", "building-blocks\RetailPos.BuildingBlocks.EventSourcing\RetailPos.BuildingBlocks.EventSourcing.csproj", "{BB000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.BuildingBlocks.MultiTenancy", "building-blocks\RetailPos.BuildingBlocks.MultiTenancy\RetailPos.BuildingBlocks.MultiTenancy.csproj", "{BB000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.BuildingBlocks.Dapr", "building-blocks\RetailPos.BuildingBlocks.Dapr\RetailPos.BuildingBlocks.Dapr.csproj", "{BB000005-0000-0000-0000-000000000005}"
+EndProject
+
+# Sales Service
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.Sales.Domain", "services\sales\RetailPos.Sales.Domain\RetailPos.Sales.Domain.csproj", "{SS000001-0000-0000-0000-000000000001}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.Sales.Application", "services\sales\RetailPos.Sales.Application\RetailPos.Sales.Application.csproj", "{SS000002-0000-0000-0000-000000000002}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.Sales.Infrastructure", "services\sales\RetailPos.Sales.Infrastructure\RetailPos.Sales.Infrastructure.csproj", "{SS000003-0000-0000-0000-000000000003}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.Sales.Api", "services\sales\RetailPos.Sales.Api\RetailPos.Sales.Api.csproj", "{SS000004-0000-0000-0000-000000000004}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.Sales.UnitTests", "services\sales\Tests\RetailPos.Sales.UnitTests\RetailPos.Sales.UnitTests.csproj", "{SS000005-0000-0000-0000-000000000005}"
+EndProject
+
+# Event Contracts
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetailPos.EventContracts.V1", "event-contracts\v1\RetailPos.EventContracts.V1.csproj", "{EC000001-0000-0000-0000-000000000001}"
+EndProject
+
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+EndGlobal
