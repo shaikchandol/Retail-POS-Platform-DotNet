@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sales-service
+  namespace: retail-pos
+  labels:
+    app: sales-service
+    version: v1
+    team: sales
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sales-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: sales-service
+        version: v1
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "sales-service"
+        dapr.io/app-port: "8080"
+        dapr.io/config: "retail-pos-tracing"
+        dapr.io/log-level: "info"
+        dapr.io/sidecar-cpu-request: "100m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "300m"
+        dapr.io/sidecar-memory-limit: "256Mi"
+    spec:
+      serviceAccountName: sales-service-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      containers:
+      - name: sales-service
+        image: retail-pos-registry.example.com/sales-service:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: Production
+        - name: ASPNETCORE_URLS
+          value: http://+:8080
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: http://otel-collector.observability.svc.cluster.local:4317
+        - name: OTEL_SERVICE_NAME
+          value: sales-service
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: service.namespace=retail-pos,service.version=1.0.0
+        - name: ConnectionStrings__EventStore
+          valueFrom:
+            secretKeyRef:
+              name: sales-db-secret
+              key: connection-string
+        - name: ConnectionStrings__ReadModel
+          valueFrom:
+            secretKeyRef:
+              name: sales-readmodel-secret
+              key: connection-string
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: sales-service
