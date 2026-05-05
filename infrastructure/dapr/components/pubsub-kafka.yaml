@@ -1,0 +1,42 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: kafka-pubsub
+  namespace: retail-pos
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+  - name: brokers
+    value: "kafka-broker-0.kafka-headless.kafka.svc.cluster.local:9092,kafka-broker-1.kafka-headless.kafka.svc.cluster.local:9092,kafka-broker-2.kafka-headless.kafka.svc.cluster.local:9092"
+  - name: consumerGroup
+    value: "retail-pos-consumers"
+  - name: authRequired
+    value: "true"
+  - name: saslUsername
+    secretKeyRef:
+      name: kafka-sasl-username
+      key: username
+  - name: saslPassword
+    secretKeyRef:
+      name: kafka-sasl-password
+      key: password
+  - name: saslMechanism
+    value: "SCRAM-SHA-512"
+  - name: maxMessageBytes
+    value: "10485760"
+  - name: oidcTokenEndpoint
+    value: ""
+  - name: initialOffset
+    value: "newest"
+  - name: schemaRegistryURL
+    value: "http://schema-registry.kafka.svc.cluster.local:8081"
+auth:
+  secretStore: kubernetes
+scopes:
+- sales-service
+- orders-service
+- inventory-service
+- payments-service
+- analytics-service
+- ai-insights-service
