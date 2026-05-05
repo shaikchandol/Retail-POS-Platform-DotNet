@@ -1,0 +1,44 @@
+# Gateway Rate Limiting Policy — Policy-as-Code
+# Version-controlled, peer-reviewed, CI-enforced
+# ─────────────────────────────────────────────
+# Swap point: this YAML is consumed by the PolicyEvaluator in the gateway.
+# Alternative: export these rules to OPA (Open Policy Agent) Rego format
+#   or to Kong/Nginx annotations — same declarative model.
+
+name: tenant-rate-limit
+priority: 10
+pathPattern: /api/**
+requiresTenant: true
+
+rateLimit:
+  # Default per-tenant sliding window
+  requestsPerMinute: 1000
+  burstMultiplier: 1.5
+  strategy: sliding-window
+
+  # Per-plan tier overrides
+  tiers:
+    starter:
+      requestsPerMinute: 200
+    professional:
+      requestsPerMinute: 2000
+    enterprise:
+      requestsPerMinute: 10000
+
+  # Per-route overrides (most specific wins)
+  routeOverrides:
+    - path: /api/v1/sales
+      requestsPerMinute: 500        # Checkout is write-heavy; protect downstream
+    - path: /api/v1/pricing/calculate
+      requestsPerMinute: 2000       # Read-heavy, cacheable
+    - path: /api/v1/reports/**
+      requestsPerMinute: 50         # Expensive queries — strict limit
+
+  # Response when limit exceeded
+  onExceeded:
+    statusCode: 429
+    headers:
+      Retry-After: "{{retryAfterSeconds}}"
+      X-RateLimit-Limit: "{{limit}}"
+      X-RateLimit-Remaining: "{{remaining}}"
+      X-RateLimit-Reset: "{{resetTimestamp}}"
