@@ -1,0 +1,32 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: retail-pos-tracing
+  namespace: retail-pos
+spec:
+  tracing:
+    samplingRate: "1"
+    zipkin:
+      endpointAddress: http://jaeger-collector.observability.svc.cluster.local:9411/api/v2/spans
+  metric:
+    enabled: true
+  accessControl:
+    defaultAction: deny
+    trustDomain: retail-pos
+    policies:
+    - appId: sales-service
+      defaultAction: allow
+      trustDomain: retail-pos
+      namespace: retail-pos
+    - appId: orders-service
+      defaultAction: allow
+      trustDomain: retail-pos
+      namespace: retail-pos
+    - appId: inventory-service
+      defaultAction: allow
+      trustDomain: retail-pos
+      namespace: retail-pos
+    - appId: payments-service
+      defaultAction: allow
+      trustDomain: retail-pos
+      namespace: retail-pos
