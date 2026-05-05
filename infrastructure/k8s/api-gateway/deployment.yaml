@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: retail-pos
+  labels:
+    app: api-gateway
+    tier: edge
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        tier: edge
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "api-gateway"
+        dapr.io/app-port: "8080"
+        dapr.io/enable-api-logging: "true"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: api-gateway
+      containers:
+      - name: api-gateway
+        image: retail-pos/api-gateway:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ASPNETCORE_URLS
+          value: "http://+:8080"
+        - name: Auth__Authority
+          valueFrom:
+            secretKeyRef:
+              name: gateway-secrets
+              key: auth-authority
+        - name: Auth__Audience
+          valueFrom:
+            secretKeyRef:
+              name: gateway-secrets
+              key: auth-audience
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-gateway-hpa
+  namespace: retail-pos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-gateway
+  minReplicas: 3
+  maxReplicas: 30
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway-netpol
+  namespace: retail-pos
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []   # Accept from anywhere (internet-facing)
+    ports:
+    - port: 8080
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: service
+    ports:
+    - port: 8080
+  - to:  # Dapr sidecar + sentry
+    ports:
+    - port: 3500
+    - port: 50001
+    - port: 443
