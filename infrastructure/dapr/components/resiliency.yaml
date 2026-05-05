@@ -1,0 +1,54 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: retail-pos-resiliency
+  namespace: retail-pos
+spec:
+  policies:
+    retries:
+      defaultRetryPolicy:
+        policy: exponential
+        maxInterval: 60s
+        maxRetries: 5
+      criticalRetryPolicy:
+        policy: exponential
+        duration: 5s
+        maxInterval: 120s
+        maxRetries: 10
+
+    circuitBreakers:
+      defaultCircuitBreaker:
+        maxRequests: 1
+        interval: 30s
+        timeout: 60s
+        trip: consecutiveFailures > 5
+
+    timeouts:
+      defaultTimeout: 10s
+      longTimeout: 60s
+
+  targets:
+    apps:
+      sales-service:
+        retry: defaultRetryPolicy
+        circuitBreaker: defaultCircuitBreaker
+        timeout: defaultTimeout
+      orders-service:
+        retry: defaultRetryPolicy
+        circuitBreaker: defaultCircuitBreaker
+        timeout: defaultTimeout
+      inventory-service:
+        retry: criticalRetryPolicy
+        circuitBreaker: defaultCircuitBreaker
+        timeout: longTimeout
+      payments-service:
+        retry: criticalRetryPolicy
+        circuitBreaker: defaultCircuitBreaker
+        timeout: longTimeout
+    components:
+      kafka-pubsub:
+        retry: defaultRetryPolicy
+        timeout: longTimeout
+      statestore:
+        retry: defaultRetryPolicy
+        timeout: defaultTimeout
