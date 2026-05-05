@@ -1,0 +1,23 @@
+apiVersion: v2
+name: retail-pos
+description: Retail POS Platform Helm Chart — deploys all microservices + Dapr components
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - retail
+  - pos
+  - microservices
+  - dapr
+  - kafka
+
+maintainers:
+  - name: Platform Team
+    email: platform@retail-pos.example.com
+
+dependencies:
+  - name: dapr
+    repository: https://dapr.github.io/helm-charts/
+    version: "1.14.x"
+    condition: dapr.enabled
