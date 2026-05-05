@@ -1,0 +1,35 @@
+parameters:
+- name: serviceDir
+  type: string
+- name: imageName
+  type: string
+- name: registryFqdn
+  type: string
+- name: buildId
+  type: string
+
+steps:
+- script: |
+    sudo apt-get update -qq && sudo apt-get install -y podman
+  displayName: Install Podman
+
+- script: |
+    podman build \
+      --file ${{ parameters.serviceDir }}/Dockerfile \
+      --tag ${{ parameters.registryFqdn }}/${{ parameters.imageName }}:${{ parameters.buildId }} \
+      --tag ${{ parameters.registryFqdn }}/${{ parameters.imageName }}:latest \
+      --label "org.opencontainers.image.source=$(Build.Repository.Uri)" \
+      --label "org.opencontainers.image.revision=$(Build.SourceVersion)" \
+      .
+  displayName: Podman Rootless Build
+
+- script: |
+    curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+    trivy image --exit-code 1 --severity HIGH,CRITICAL ${{ parameters.registryFqdn }}/${{ parameters.imageName }}:${{ parameters.buildId }}
+  displayName: Trivy Vulnerability Scan
+
+- script: |
+    podman login ${{ parameters.registryFqdn }} -u $(registryUser) -p $(registryPassword)
+    podman push ${{ parameters.registryFqdn }}/${{ parameters.imageName }}:${{ parameters.buildId }}
+    podman push ${{ parameters.registryFqdn }}/${{ parameters.imageName }}:latest
+  displayName: Push Container Image
