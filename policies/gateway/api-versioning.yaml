@@ -1,0 +1,70 @@
+# API Version Routing Policy — Policy-as-Code
+# ─────────────────────────────────────────────
+name: api-version-routing
+priority: 20
+pathPattern: /api/**
+
+versioning:
+  strategy: url-segment          # /api/v1/ /api/v2/
+  # Alternative strategies (swap in policy only):
+  #   header:       Accept-Version: v2
+  #   querystring:  ?api-version=2.0
+
+  supportedVersions:
+    - version: "v1"
+      status: stable
+      sunsetDate: null
+
+    - version: "v2"
+      status: preview
+      requiresFeatureFlag: api-v2-preview
+
+  # Sunset enforcement
+  sunsetBehavior:
+    warnHeader: "Deprecation"
+    blockAfterSunset: true
+    sunsetStatusCode: 410
+
+  # Version negotiation fallback
+  fallback:
+    toLatestStable: true
+    addWarningHeader: true
+
+routing:
+  # Routes map version+path → upstream service + cluster
+  - match: /api/v1/sales/**
+    cluster: sales-service-v1
+    transform:
+      stripPrefix: /api/v1
+
+  - match: /api/v1/orders/**
+    cluster: orders-service-v1
+    transform:
+      stripPrefix: /api/v1
+
+  - match: /api/v1/inventory/**
+    cluster: inventory-service-v1
+    transform:
+      stripPrefix: /api/v1
+
+  - match: /api/v1/payments/**
+    cluster: payments-service-v1
+    transform:
+      stripPrefix: /api/v1
+
+  - match: /api/v1/pricing/**
+    cluster: pricing-service-v1
+    transform:
+      stripPrefix: /api/v1
+
+  # BFF routes
+  - match: /bff/pos/**
+    cluster: bff-pos
+    transform:
+      stripPrefix: /bff/pos
+
+  - match: /bff/web/**
+    cluster: bff-web
+
+  - match: /bff/mobile/**
+    cluster: bff-mobile
