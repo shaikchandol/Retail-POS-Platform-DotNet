@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sales-service
+  namespace: retail-pos
+  labels:
+    app: sales-service
+spec:
+  selector:
+    app: sales-service
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+  - name: dapr-grpc
+    port: 50001
+    targetPort: 50001
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sales-service-sa
+  namespace: retail-pos
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sales-service-hpa
+  namespace: retail-pos
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sales-service
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
