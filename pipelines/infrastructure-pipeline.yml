@@ -1,0 +1,89 @@
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include:
+      - infrastructure/**
+
+variables:
+  - group: retail-pos-platform-vars
+
+stages:
+- stage: ValidateInfra
+  displayName: Validate Infrastructure
+  jobs:
+  - job: Validate
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - script: |
+        # Validate K8s manifests with kubeval
+        curl -LO https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+        tar xf kubeval-linux-amd64.tar.gz && sudo mv kubeval /usr/local/bin
+        kubeval --strict infrastructure/k8s/**/*.yaml
+      displayName: Kubeval K8s Manifests
+
+    - script: |
+        # Validate Dapr component YAML
+        pip install yamllint
+        yamllint infrastructure/dapr/
+      displayName: YAML Lint Dapr Components
+
+    - task: HelmDeploy@0
+      displayName: Helm Lint
+      inputs:
+        command: lint
+        chartType: FilePath
+        chartPath: infrastructure/iac/helm/retail-pos
+
+- stage: DeployInfraDev
+  dependsOn: ValidateInfra
+  displayName: Deploy Infrastructure (Dev)
+  jobs:
+  - deployment: DeployDev
+    environment: retail-pos-infra-dev
+    pool:
+      vmImage: ubuntu-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: HelmDeploy@0
+            inputs:
+              command: upgrade
+              install: true
+              releaseName: retail-pos-dev
+              chartType: FilePath
+              chartPath: infrastructure/iac/helm/retail-pos
+              namespace: retail-pos-dev
+              overrideValues: |
+                global.environment=dev
+                global.registry=$(registryFqdn)
+                kafka.enabled=true
+                dapr.enabled=true
+
+- stage: DeployInfraProd
+  dependsOn: DeployInfraDev
+  displayName: Deploy Infrastructure (Prod)
+  jobs:
+  - deployment: DeployProd
+    environment: retail-pos-infra-prod
+    pool:
+      vmImage: ubuntu-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: HelmDeploy@0
+            inputs:
+              command: upgrade
+              install: true
+              releaseName: retail-pos-prod
+              chartType: FilePath
+              chartPath: infrastructure/iac/helm/retail-pos
+              namespace: retail-pos
+              overrideValues: |
+                global.environment=prod
+                global.registry=$(registryFqdn)
+                kafka.replicaCount=3
+                dapr.enabled=true
