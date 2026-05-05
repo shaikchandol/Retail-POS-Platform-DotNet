@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pci
+  labels:
+    security-zone: pci
+    compliance: pci-dss
+---
+# Default deny-all in PCI namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: pci
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+# Only payments-service (retail-pos namespace) can reach tokenization API
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-payments-to-tokenization
+  namespace: pci
+spec:
+  podSelector:
+    matchLabels:
+      app: tokenization-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: retail-pos
+      podSelector:
+        matchLabels:
+          app: payments-service
+    ports:
+    - port: 8443
+      protocol: TCP
+---
+# Tokenization API: only egress to HSM/KV and OTel
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tokenization-egress
+  namespace: pci
+spec:
+  podSelector:
+    matchLabels:
+      app: tokenization-api
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    ports:
+    - port: 443    # Azure Key Vault / HSM
+    - port: 4317   # OTel collector
+    - port: 3500   # Dapr sidecar
