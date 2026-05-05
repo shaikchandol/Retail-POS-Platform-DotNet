@@ -1,0 +1,87 @@
+global:
+  environment: dev
+  registry: retail-pos-registry.example.com
+  imageTag: latest
+  tenantIsolation: schema-per-tenant
+
+dapr:
+  enabled: true
+  global:
+    logLevel: info
+    mtls:
+      enabled: true
+
+kafka:
+  replicaCount: 1    # override to 3 for production
+  storage: 50Gi
+
+services:
+  sales:
+    replicaCount: 1
+    image: retail-pos/sales-service
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    autoscaling:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+
+  orders:
+    replicaCount: 1
+    image: retail-pos/orders-service
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  payments:
+    replicaCount: 1
+    image: retail-pos/payments-service
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  inventory:
+    replicaCount: 1
+    image: retail-pos/inventory-service
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+postgresql:
+  enabled: true
+  global:
+    postgresql:
+      auth:
+        database: retail_pos
+        existingSecret: pg-secret
+  primary:
+    persistence:
+      size: 100Gi
+
+redis:
+  enabled: true
+  auth:
+    existingSecret: redis-secret
+  master:
+    persistence:
+      size: 10Gi
+
+observability:
+  enabled: true
+  jaeger:
+    enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  loki:
+    enabled: true
